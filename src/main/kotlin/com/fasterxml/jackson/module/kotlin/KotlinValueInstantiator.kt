@@ -24,7 +24,8 @@ internal class KotlinValueInstantiator(
     src: StdValueInstantiator,
     private val cache: ReflectionCache,
     private val nullToEmptyCollection: Boolean,
-    private val nullToEmptyMap: Boolean
+    private val nullToEmptyMap: Boolean,
+    private val nullIsSameAsDefault: Boolean
 ) : StdValueInstantiator(src) {
     @Suppress("UNCHECKED_CAST")
     override fun createFromObjectWith(
@@ -90,7 +91,11 @@ internal class KotlinValueInstantiator(
             }
 
             var paramVal = if (!isMissing || paramDef.isPrimitive() || jsonProp.hasInjectableValueId()) {
-                buffer.getParameter(jsonProp)
+                val tempParamVal = buffer.getParameter(jsonProp)
+                if (nullIsSameAsDefault && tempParamVal == null && paramDef.isOptional) {
+                    return@forEachIndexed
+                }
+                tempParamVal
             } else {
                 // trying to get suitable "missing" value provided by deserializer
                 jsonProp.valueDeserializer?.getNullValue(ctxt)
@@ -157,7 +162,8 @@ internal class KotlinValueInstantiator(
 internal class KotlinInstantiators(
     private val cache: ReflectionCache,
     private val nullToEmptyCollection: Boolean,
-    private val nullToEmptyMap: Boolean
+    private val nullToEmptyMap: Boolean,
+    private val nullIsSameAsDefault: Boolean
 ) : ValueInstantiators {
     override fun findValueInstantiator(
         deserConfig: DeserializationConfig,
@@ -166,7 +172,7 @@ internal class KotlinInstantiators(
     ): ValueInstantiator {
         return if (beanDescriptor.beanClass.isKotlinClass()) {
             if (defaultInstantiator is StdValueInstantiator) {
-                KotlinValueInstantiator(defaultInstantiator, cache, nullToEmptyCollection, nullToEmptyMap)
+                KotlinValueInstantiator(defaultInstantiator, cache, nullToEmptyCollection, nullToEmptyMap, nullIsSameAsDefault)
             } else {
                 // TODO: return defaultInstantiator and let default method parameters and nullability go unused?  or die with exception:
                 throw IllegalStateException("KotlinValueInstantiator requires that the default ValueInstantiator is StdValueInstantiator")
